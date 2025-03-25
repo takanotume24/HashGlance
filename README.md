@@ -1,23 +1,23 @@
-# Directory Comparison by File Hash (Hash-based Comparison)
+# HashGlance
 
-This repository contains a Python script that compares the contents of two directories by computing and comparing their files' hash values. Files with matching hash values are considered identical, even if their paths differ.
+HashGlance is a Python tool that compares the contents of two directories by computing and comparing their files' hash values. Files with matching hash values are considered identical, even if their paths differ.
 
 ## Features
 
-- Recursively scans two directories (A and B) to list all files.
-- Computes a specified hash (by default, `sha256`) for each file.
-- Uses a dictionary keyed by the hash value to identify matching (identical) files across the two directories.
-- Provides a summary of:
-  - The number of groups of identical files (matched by hash).
-  - Files unique to directory A.
-  - Files unique to directory B.
-- Parallel processing via [joblib](https://joblib.readthedocs.io/en/latest/) for faster hash computation (configurable number of jobs).
-- Stores results in a JSON file, timestamped for convenience.
+- **Recursive Scanning**: Recursively scans two directories (A and B) to list all files.  
+- **Configurable Hashing**: Computes a specified hash (by default, `sha256`) for each file.  
+- **Hash-based Comparison**: Uses a dictionary keyed by the hash value to identify matching (identical) files across the two directories.  
+- **Summary and Detailed Reporting**:  
+  - Number of groups of identical files  
+  - Files unique to directory A  
+  - Files unique to directory B  
+- **Parallel Processing**: Utilizes [joblib](https://joblib.readthedocs.io/en/latest/) for faster hash computation (configurable number of jobs).  
+- **Results Logging**: Stores results in a JSON file, timestamped for convenience.
 
 ## Requirements
 
-- Python 3.7 or higher
-- [joblib](https://pypi.org/project/joblib/)
+- Python 3.8 or higher  
+- [joblib](https://pypi.org/project/joblib/)  
 - [tqdm](https://pypi.org/project/tqdm/) (used for progress bars in single-threaded mode)
 
 ## Installation
@@ -29,7 +29,7 @@ This repository contains a Python script that compares the contents of two direc
    pip install -r requirements.txt
    ```
 
-3. You are ready to run the script.
+3. You are ready to use HashGlance.
 
 ## Usage
 
@@ -98,7 +98,7 @@ The generated JSON file includes:
 ## How It Works
 
 1. **File Discovery**  
-   The script uses the function `get_all_files(directory: Path)` to recursively find and list all files in a given directory.
+   HashGlance uses `get_all_files(directory: Path)` to recursively find and list all files in a given directory.
 
 2. **Hash Computation**  
    For each file, `compute_file_hash(file_path: Path, hash_alg: str)` calculates the specified hash (default `sha256`) in chunks to handle large files efficiently.
@@ -107,7 +107,7 @@ The generated JSON file includes:
    `joblib.Parallel` is used to compute hashes for multiple files simultaneously. The number of jobs can be set via `--n-jobs`.
 
 4. **Comparison**  
-   The dictionaries built for directories A and B (mapping from `hash_value -> [paths]`) are compared. If a hash value is present in both dictionaries, those files are considered identical.
+   Two dictionaries (one for directory A, one for directory B) map each `hash_value -> [paths]`. If a hash value is present in both dictionaries, those files are considered identical.
 
 5. **Output Generation**  
    Results are printed to the console and written to a timestamped JSON log file for further analysis or auditing.
