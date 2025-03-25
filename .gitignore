@@ -1,3 +1,4 @@
 .venv/
 diff.txt
 compare_result*.json
+__pycache__/
