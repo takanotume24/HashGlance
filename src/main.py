@@ -11,10 +11,10 @@ from joblib import Parallel, delayed
 @dataclass
 class MatchedFiles:
     """
-    同一ハッシュ（同一内容）を持つファイル群を保持する。
-    - hash_value: そのファイル群のハッシュ値
-    - paths_in_a: ディレクトリA側の該当ファイルパス一覧 (絶対パス)
-    - paths_in_b: ディレクトリB側の該当ファイルパス一覧 (絶対パス)
+    Holds a group of files that share the same hash (indicating identical content).
+    - hash_value: The common hash value for these files
+    - paths_in_a: List of matching file paths in directory A (absolute paths)
+    - paths_in_b: List of matching file paths in directory B (absolute paths)
     """
 
     hash_value: str
@@ -25,7 +25,7 @@ class MatchedFiles:
 @dataclass
 class CompareResult:
     """
-    ディレクトリ比較結果をまとめて保持するデータクラス（ハッシュベース版）。
+    A data class that aggregates the results of a hash-based directory comparison.
     """
 
     matched: List[MatchedFiles] = field(default_factory=list)
@@ -35,7 +35,8 @@ class CompareResult:
 
 def get_all_files(directory: Path) -> List[Path]:
     """
-    ディレクトリ配下のファイルを再帰的にたどり、Pathオブジェクトのリストを返す。
+    Recursively traverse the specified directory and return a list of Path objects
+    for all files within.
     """
     files = []
     for item in directory.iterdir():
@@ -48,8 +49,8 @@ def get_all_files(directory: Path) -> List[Path]:
 
 def compute_file_hash(file_path: Path, hash_alg: str) -> str:
     """
-    指定したファイルのハッシュ値を計算して文字列として返す。
-    ※ 'hash_alg' で指定のハッシュアルゴリズムを使用。
+    Compute the hash value (specified by 'hash_alg') for the given file
+    and return it as a string.
     """
     import hashlib
 
@@ -64,11 +65,12 @@ def build_hash_to_paths_map(
     directory: Path, hash_alg="sha256", n_jobs=-1
 ) -> Dict[str, List[str]]:
     """
-    ディレクトリ配下のファイルについて:
-      ハッシュ値 -> [絶対パス, ...] のマップを構築して返す。
+    Build and return a map of:
+      hash_value -> [absolute_file_path, ...]
+    for all files within the given directory.
 
-    n_jobs: joblibのParallelに渡す並列ジョブ数 (デフォルト -1: CPU全コア使用)
-            n_jobs=1の場合はシングルスレッドでtqdmの進捗を表示。
+    n_jobs: Number of parallel jobs for joblib's Parallel (default: -1 = use all CPU cores)
+            If n_jobs=1, a tqdm progress bar is shown for single-threaded processing.
     """
     from collections import defaultdict
 
@@ -76,10 +78,10 @@ def build_hash_to_paths_map(
 
     def process_file(f: Path):
         h = compute_file_hash(f, hash_alg)
-        abs_path = str(f.resolve())  # 絶対パス
+        abs_path = str(f.resolve())
         return h, abs_path
 
-    # --- n_jobs=1の場合はtqdmでシングルスレッド処理 ---
+    # --- If n_jobs=1, run in single-threaded mode with tqdm ---
     if n_jobs == 1:
         from tqdm import tqdm
 
@@ -88,7 +90,7 @@ def build_hash_to_paths_map(
             res = process_file(f)
             results.append(res)
     else:
-        # --- n_jobs != 1 の場合はjoblibで並列実行 ---
+        # --- If n_jobs != 1, run in parallel with joblib ---
         results = Parallel(n_jobs=n_jobs, verbose=0)(
             delayed(process_file)(f) for f in files
         )
@@ -97,8 +99,8 @@ def build_hash_to_paths_map(
     for f, res in zip(files, results):
         if res is None:
             raise ValueError(
-                f"ハッシュ計算結果が None になりました。ファイル: {f}\n"
-                "読み取りエラーや権限不足が原因の可能性があります。"
+                f"The computed hash result is None. File: {f}\n"
+                "This may be due to read errors or insufficient permissions."
             )
         h, abs_path = res
         hash_map[h].append(abs_path)
@@ -110,14 +112,15 @@ def compare_by_hash(
     hash_map_a: Dict[str, List[str]], hash_map_b: Dict[str, List[str]]
 ) -> CompareResult:
     """
-    A・Bの (ハッシュ値 -> [絶対パス群]) 辞書を受け取り、ハッシュ値ベースで比較して CompareResult を返す。
+    Receive two dictionaries for directories A and B (hash_value -> [absolute paths]),
+    compare them by hash, and return the resulting CompareResult.
     """
     result = CompareResult()
 
     hashes_a = set(hash_map_a.keys())
     hashes_b = set(hash_map_b.keys())
 
-    # 共通のハッシュ値
+    # Common hash values
     common_hashes = hashes_a & hashes_b
     for h in common_hashes:
         result.matched.append(
@@ -128,12 +131,12 @@ def compare_by_hash(
             )
         )
 
-    # Aだけにあるハッシュ値
+    # Hash values only in A
     only_in_a_hashes = hashes_a - hashes_b
     for h in only_in_a_hashes:
         result.only_in_a[h] = hash_map_a[h]
 
-    # Bだけにあるハッシュ値
+    # Hash values only in B
     only_in_b_hashes = hashes_b - hashes_a
     for h in only_in_b_hashes:
         result.only_in_b[h] = hash_map_b[h]
@@ -145,9 +148,10 @@ def create_log_data(
     dir_a: Path, dir_b: Path, hash_alg: str, n_jobs: int, compare_result: CompareResult
 ) -> Dict:
     """
-    CompareResult などの情報を元に、JSON出力用の辞書を作って返す（関数型っぽく）。
+    Create and return a dictionary for JSON output, based on CompareResult and
+    other provided information.
     """
-    # 集計情報
+    # Summary
     num_matched = len(compare_result.matched)
     num_only_in_a = sum(len(paths) for paths in compare_result.only_in_a.values())
     num_only_in_b = sum(len(paths) for paths in compare_result.only_in_b.values())
@@ -177,7 +181,8 @@ def create_log_data(
 
 def save_log_data_as_json(log_data: Dict) -> str:
     """
-    ログ用の辞書を受け取り、JSONファイル名を返す（ファイル名には日付を使用）。
+    Save the given dictionary as a JSON file (timestamped filename)
+    and return the filename.
     """
     timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     log_filename = f"compare_result_{timestamp_str}.json"
@@ -188,89 +193,89 @@ def save_log_data_as_json(log_data: Dict) -> str:
 
 def print_compare_result(compare_result: CompareResult):
     """
-    CompareResult の概要と (verboseな場合は詳細) を標準出力に表示する。
+    Print a summary (and detailed info in verbose mode) of the CompareResult to stdout.
     """
     num_matched = len(compare_result.matched)
     num_only_in_a = sum(len(paths) for paths in compare_result.only_in_a.values())
     num_only_in_b = sum(len(paths) for paths in compare_result.only_in_b.values())
 
-    print("=== 比較結果 (ハッシュベース) ===")
-    print(f"同一内容のファイルグループ数: {num_matched}個")
-    print(f"Aにのみ存在するファイル(合計): {num_only_in_a}個")
-    print(f"Bにのみ存在するファイル(合計): {num_only_in_b}個")
+    print("=== Comparison Result (Hash-based) ===")
+    print(f"Number of groups of identical files: {num_matched}")
+    print(f"Files only in A (total): {num_only_in_a}")
+    print(f"Files only in B (total): {num_only_in_b}")
 
 
 def print_verbose_detail(compare_result: CompareResult):
     """
-    CompareResult の詳細情報を標準出力に表示する (verbose向け)。
+    Print detailed information about the CompareResult to stdout (verbose).
     """
     if compare_result.matched:
-        print("\n-- 同一内容と判定されたファイルたち --")
+        print("\n-- Files determined to be identical --")
         for matched_group in compare_result.matched:
-            print(f"ハッシュ: {matched_group.hash_value}")
-            print(f"  A側: {matched_group.paths_in_a}")
-            print(f"  B側: {matched_group.paths_in_b}")
+            print(f"Hash: {matched_group.hash_value}")
+            print(f"  In A: {matched_group.paths_in_a}")
+            print(f"  In B: {matched_group.paths_in_b}")
 
     if compare_result.only_in_a:
-        print("\n-- Aにのみ存在するファイル --")
+        print("\n-- Files only in A --")
         for h, paths in compare_result.only_in_a.items():
-            print(f"ハッシュ: {h}")
-            print(f"  パス: {paths}")
+            print(f"Hash: {h}")
+            print(f"  Paths: {paths}")
 
     if compare_result.only_in_b:
-        print("\n-- Bにのみ存在するファイル --")
+        print("\n-- Files only in B --")
         for h, paths in compare_result.only_in_b.items():
-            print(f"ハッシュ: {h}")
-            print(f"  パス: {paths}")
+            print(f"Hash: {h}")
+            print(f"  Paths: {paths}")
 
 
 def parse_args() -> argparse.Namespace:
     """
-    コマンドライン引数をパースして返す（関数型っぽく）。
+    Parse and return command-line arguments (functional style).
     """
     parser = argparse.ArgumentParser(
-        description="ファイル内容（ハッシュ値）を比較し、パスが違っても同じハッシュなら同一扱いするスクリプト (Joblib並列対応)"
+        description="Compare file contents by hash value. Files are treated as identical if they share the same hash, even if their paths differ. (Supports parallel processing with joblib.)"
     )
-    parser.add_argument("dir_a", type=str, help="比較元ディレクトリ (A) のパス")
-    parser.add_argument("dir_b", type=str, help="比較先ディレクトリ (B) のパス")
+    parser.add_argument("dir_a", type=str, help="Path to the source directory (A)")
+    parser.add_argument("dir_b", type=str, help="Path to the target directory (B)")
     parser.add_argument(
         "--hash-alg",
         type=str,
         default="sha256",
-        help="使用するハッシュアルゴリズム (デフォルト: sha256)",
+        help="The hash algorithm to use (default: sha256)",
     )
     parser.add_argument(
         "--n-jobs",
         type=int,
         default=-1,
-        help="並列実行するジョブ数 (デフォルト: -1 = CPUコアを最大限使用)",
+        help="Number of parallel jobs (default: -1 = use all CPU cores)",
     )
     parser.add_argument(
-        "--verbose", action="store_true", help="ファイル一覧など詳細情報を出力する"
+        "--verbose", action="store_true", help="Print detailed file lists, etc."
     )
     args = parser.parse_args()
     return args
 
 
 def main():
-    # --- 引数を受け取る ---
+    # --- Retrieve arguments ---
     args = parse_args()
 
     p_a = Path(args.dir_a)
     p_b = Path(args.dir_b)
 
-    # --- 比較処理の実行 ---
+    # --- Perform the comparison ---
     hash_map_a = build_hash_to_paths_map(p_a, args.hash_alg, n_jobs=args.n_jobs)
     hash_map_b = build_hash_to_paths_map(p_b, args.hash_alg, n_jobs=args.n_jobs)
 
     compare_result = compare_by_hash(hash_map_a, hash_map_b)
 
-    # --- 結果表示 ---
+    # --- Print the results ---
     print_compare_result(compare_result)
     if args.verbose:
         print_verbose_detail(compare_result)
 
-    # --- ログデータ生成 & 保存 ---
+    # --- Generate & save log data ---
     log_data = create_log_data(
         dir_a=p_a,
         dir_b=p_b,
@@ -279,7 +284,7 @@ def main():
         compare_result=compare_result,
     )
     log_filename = save_log_data_as_json(log_data)
-    print(f"\n=== 比較結果をJSONに保存しました: {log_filename} ===")
+    print(f"\n=== Comparison result saved to JSON: {log_filename} ===")
 
 
 if __name__ == "__main__":
